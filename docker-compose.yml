@@ -300,6 +300,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/energy_tracker
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: password
+      SPRING_DATASOURCE_REPLICA_URL: jdbc:mysql://mysql-replica:3306/energy_tracker
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
       SPRING_KAFKA_LISTENER_OBSERVATION_ENABLED: "true"
