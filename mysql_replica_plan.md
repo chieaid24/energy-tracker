@@ -1,5 +1,17 @@
 # MySQL Read Replicas — Plan
 
+## Status Summary (as of 2026-05-06)
+
+| Phase | Description | Status |
+|---|---|---|
+| Phase 0 | Ordering note (infra first, then app changes) | ✅ Acknowledged |
+| Phase 1 | Docker Compose: primary config + replica container | ✅ Complete |
+| Phase 2 | Kubernetes Helm: replica StatefulSet + Service + global ConfigMap | ✅ Complete |
+| Phase 3 | App-side read routing (DataSourceConfig, RoutingDataSource, @Transactional) | ❌ Not started |
+| Phase 4 | Final cross-cutting checks | ❌ Not started (blocked by Phase 3) |
+
+---
+
 ## Context
 
 The IoT Energy Tracker runs a single MySQL 8.3.0 instance (Docker Compose) / single-replica StatefulSet (Helm) shared by `user-service`, `device-service`, and `alert-service`. The user wants to add **one read replica** in each environment, with Spring Boot apps **routing reads to the replica via app-side `@Transactional(readOnly=true)`**. The driver is to demonstrate horizontal read scaling with the smallest reasonable diff to the current setup.
@@ -37,18 +49,18 @@ App-side: `LazyConnectionDataSourceProxy → AbstractRoutingDataSource → {prim
 
 ---
 
-## Phase 0 — Per-service Spring config (do this first; deploy the infra in Phase 1/2 against unchanged apps, then ship the app changes)
+## Phase 0 — Per-service Spring config (do this first; deploy the infra in Phase 1/2 against unchanged apps, then ship the app changes) ✅
 
 Order matters: stand the replica up first. Apps keep working unchanged because the new env vars are optional; only after replication is verified do we ship the routing code.
 
 ---
 
-## Phase 1 — Docker Compose: add replica + replication
+## Phase 1 — Docker Compose: add replica + replication ✅
 
-### 1.1 Source MySQL config (existing `mysql` container)
+### 1.1 Source MySQL config (existing `mysql` container) ✅
 
 Files to add/edit:
-- **NEW** `docker/mysql/source.cnf` — server-id, log-bin, GTID:
+- ✅ **NEW** `docker/mysql/source.cnf` — server-id, log-bin, GTID:
   ```ini
   [mysqld]
   server-id=1
@@ -57,13 +69,13 @@ Files to add/edit:
   gtid_mode=ON
   enforce_gtid_consistency=ON
   ```
-- **EDIT** `docker/mysql/init.sql` — append a `replicator` user with `REPLICATION SLAVE` privilege:
+- ✅ **EDIT** `docker/mysql/init.sql` — append a `replicator` user with `REPLICATION SLAVE` privilege:
   ```sql
   CREATE USER IF NOT EXISTS 'replicator'@'%' IDENTIFIED WITH mysql_native_password BY 'replicator-pass';
   GRANT REPLICATION SLAVE ON *.* TO 'replicator'@'%';
   FLUSH PRIVILEGES;
   ```
-- **EDIT** `docker-compose.yml` `mysql` service — mount the cnf and bump healthcheck to confirm bin-log:
+- ✅ **EDIT** `docker-compose.yml` `mysql` service — mount the cnf and bump healthcheck to confirm bin-log:
   ```yaml
   volumes:
     - ./docker/mysql/source.cnf:/etc/mysql/conf.d/source.cnf:ro
@@ -71,10 +83,10 @@ Files to add/edit:
     - db-data:/var/lib/mysql
   ```
 
-### 1.2 Replica MySQL container
+### 1.2 Replica MySQL container ✅
 
 Files to add:
-- **NEW** `docker/mysql/replica.cnf`:
+- ✅ **NEW** `docker/mysql/replica.cnf`:
   ```ini
   [mysqld]
   server-id=2
@@ -84,7 +96,7 @@ Files to add:
   gtid_mode=ON
   enforce_gtid_consistency=ON
   ```
-- **NEW** `docker/mysql/replica-init.sql` — runs on replica's first start, after MySQL is up:
+- ✅ **NEW** `docker/mysql/replica-init.sql` — runs on replica's first start, after MySQL is up:
   ```sql
   CHANGE REPLICATION SOURCE TO
     SOURCE_HOST='mysql',
@@ -95,7 +107,7 @@ Files to add:
     GET_SOURCE_PUBLIC_KEY=1;
   START REPLICA;
   ```
-- **EDIT** `docker-compose.yml` — add `mysql-replica` service depending on `mysql` healthcheck:
+- ✅ **EDIT** `docker-compose.yml` — add `mysql-replica` service depending on `mysql` healthcheck:
   ```yaml
   mysql-replica:
     image: mysql:8.3.0
@@ -121,7 +133,7 @@ Files to add:
   ```
   Add `db-data-replica:` to the `volumes:` section.
 
-### 1.3 Validation — Phase 1
+### 1.3 Validation — Phase 1 ⚠️ (code complete; re-run to verify if needed)
 ```bash
 docker compose down -v && docker compose up -d mysql mysql-replica
 docker compose exec mysql mysql -uroot -ppassword -e "SHOW MASTER STATUS\G SHOW BINARY LOGS;"
@@ -144,14 +156,14 @@ curl -fsS localhost:8084/actuator/health  # alert-service
 
 ---
 
-## Phase 2 — Kubernetes Helm: extend infra-chart with a replica StatefulSet
+## Phase 2 — Kubernetes Helm: extend infra-chart with a replica StatefulSet ✅
 
 Two StatefulSets (primary + replica) is preferable to one parameterized StatefulSet with ordinal-based init logic — fewer template branches, cleaner mental model, fits "fewest changes" since the existing StatefulSet stays largely intact as the primary.
 
-### 2.1 Primary StatefulSet — minimal additions
+### 2.1 Primary StatefulSet — minimal additions ✅
 
 Files:
-- **EDIT** `k8s/charts/infra-chart/charts/mysql/templates/configmap.yaml` — add two keys:
+- ✅ **EDIT** `k8s/charts/infra-chart/charts/mysql/templates/configmap.yaml` — add two keys:
   ```yaml
   source.cnf: |
     [mysqld]
@@ -166,14 +178,14 @@ Files:
     GRANT REPLICATION SLAVE ON *.* TO 'replicator'@'%';
     FLUSH PRIVILEGES;
   ```
-- **EDIT** `k8s/charts/infra-chart/charts/mysql/templates/statefulset.yaml` — mount `source.cnf` at `/etc/mysql/conf.d/source.cnf` (subPath); the existing init.sql mount continues to work.
-- **EDIT** `k8s/charts/infra-chart/charts/mysql/templates/secret.yaml` — add `replicator-password: replicator-pass`. Surface via `MYSQL_REPLICATION_PASSWORD` env on the replica deployment.
+- ✅ **EDIT** `k8s/charts/infra-chart/charts/mysql/templates/statefulset.yaml` — mount `source.cnf` at `/etc/mysql/conf.d/source.cnf` (subPath); the existing init.sql mount continues to work.
+- ✅ **EDIT** `k8s/charts/infra-chart/charts/mysql/templates/secret.yaml` — add `replicator-password: replicator-pass`. Surface via `MYSQL_REPLICATION_PASSWORD` env on the replica deployment.
 
-### 2.2 Replica StatefulSet (new subchart files)
+### 2.2 Replica StatefulSet (new subchart files) ✅
 
 New files under `k8s/charts/infra-chart/charts/mysql/templates/`:
-- `statefulset-replica.yaml` — separate StatefulSet `{{ .Release.Name }}-mysql-replica`, replicas=1, mounts `replica.cnf` from the same ConfigMap (extend ConfigMap with `replica.cnf` key) and a new `replica-init.sql` key whose `SOURCE_HOST` is `{{ .Release.Name }}-mysql.default.svc.cluster.local`.
-- `service-replica.yaml` — ClusterIP service `{{ .Release.Name }}-mysql-replica` on port 3306 selecting the replica pods. Do **not** expose the replica via LoadBalancer (no need for external read access).
+- ✅ `statefulset-replica.yaml` — separate StatefulSet `{{ .Release.Name }}-mysql-replica`, replicas=1, mounts `replica.cnf` from the same ConfigMap (extend ConfigMap with `replica.cnf` key) and a new `replica-init.sql` key whose `SOURCE_HOST` is `{{ .Release.Name }}-mysql.default.svc.cluster.local`.
+- ✅ `service-replica.yaml` — ClusterIP service `{{ .Release.Name }}-mysql-replica` on port 3306 selecting the replica pods. Do **not** expose the replica via LoadBalancer (no need for external read access).
 - The existing primary service (`{{ .Release.Name }}-mysql`, LoadBalancer:3307) is unchanged.
 
 `values.yaml` additions on the subchart:
@@ -187,9 +199,9 @@ replica:
 auth:
   replicationPassword: replicator-pass
 ```
-The parent `infra-chart/values.yaml` mirrors `replica.enabled: true` so it can be toggled.
+The parent `infra-chart/values.yaml` mirrors `replica.enabled: true` so it can be toggled. ✅
 
-### 2.3 Validation — Phase 2
+### 2.3 Validation — Phase 2 ⚠️ (code complete; re-run to verify if needed)
 ```bash
 helm upgrade infra ./k8s/charts/infra-chart
 kubectl rollout status statefulset/infra-mysql
@@ -217,30 +229,30 @@ curl -fsS localhost/api/v1/user/actuator/health
 
 ---
 
-## Phase 3 — App-side read routing (user-service, device-service, alert-service)
+## Phase 3 — App-side read routing (user-service, device-service, alert-service) ❌ NOT STARTED
 
 Per-service, identical pattern. Boot 4.0.1 + HikariCP + Spring Data JPA. **No new Maven dependencies** — `spring-jdbc` (already transitive via JPA) provides `AbstractRoutingDataSource` and `LazyConnectionDataSourceProxy`.
 
-### 3.1 Routing infrastructure (each of the 3 services)
+### 3.1 Routing infrastructure (each of the 3 services) ❌
 
 New files (paths shown for `user-service`; mirror in `device-service` and `alert-service`):
-- `services/user-service/src/main/java/com/chieaid24/user_service/config/RoutingDataSource.java` — extends `AbstractRoutingDataSource`, `determineCurrentLookupKey()` returns `"REPLICA"` when `TransactionSynchronizationManager.isCurrentTransactionReadOnly()` is true, else `"PRIMARY"`. Log the resolved key at DEBUG.
-- `services/user-service/src/main/java/com/chieaid24/user_service/config/DataSourceConfig.java`:
+- ❌ `services/user-service/src/main/java/com/chieaid24/user_service/config/RoutingDataSource.java` — extends `AbstractRoutingDataSource`, `determineCurrentLookupKey()` returns `"REPLICA"` when `TransactionSynchronizationManager.isCurrentTransactionReadOnly()` is true, else `"PRIMARY"`. Log the resolved key at DEBUG.
+- ❌ `services/user-service/src/main/java/com/chieaid24/user_service/config/DataSourceConfig.java`:
   - `@ConfigurationProperties("spring.datasource")` → primary `DataSourceProperties`, build via `DataSourceBuilder.create().type(HikariDataSource.class)` with `maximumPoolSize=8`, register a Hikari `MeterBinder` named `primary`.
   - `@ConfigurationProperties("spring.datasource.replica")` → replica `DataSourceProperties` (URL/username/password); fall back to primary's username/password when the replica-specific values are blank. Build same way with `maximumPoolSize=4`, MeterBinder name `replica`.
   - Build `RoutingDataSource` with `targetDataSources={PRIMARY:primary, REPLICA:replica}`, `defaultTargetDataSource=primary`.
   - Wrap in `LazyConnectionDataSourceProxy` and mark **only that bean** `@Primary`.
-- (user-service only) `@FlywayDataSource`-annotated bean returning the primary `HikariDataSource` directly. Hard requirement — Flyway must never see the routing proxy.
+- ❌ (user-service only) `@FlywayDataSource`-annotated bean returning the primary `HikariDataSource` directly. Hard requirement — Flyway must never see the routing proxy.
 
-### 3.2 Service-method `@Transactional(readOnly=true)` annotations
+### 3.2 Service-method `@Transactional(readOnly=true)` annotations ❌
 
 Apply **only on safe read paths**. `SimpleJpaRepository` already wraps repository-method calls in `readOnly=true`, but routing decisions should be explicit at the service layer where humans review them.
 
-- **user-service** — DO **NOT** annotate `AuthService.login` / `googleLogin` (read-after-register hazard). Leave the rest of `UserService` reads as today (repo defaults still route them to replica via auto `readOnly=true`). Do not wrap multi-step service methods.
-- **device-service** — annotate `getDeviceById`, `getAllDevicesByUserId`, `getTotalDevices` with `@Transactional(readOnly=true)`.
-- **alert-service** — annotate **only the controller-driven read methods** (e.g. `findByUserIdOrderByCreatedAtDesc`, `countByUserId`). Do **not** annotate the Kafka listener path (`AlertService.energyUsageAlertEvent`) — `readOnly=true` flips Hibernate to `FlushMode.MANUAL` and silently no-ops accidental writes.
+- ❌ **user-service** — DO **NOT** annotate `AuthService.login` / `googleLogin` (read-after-register hazard). Leave the rest of `UserService` reads as today (repo defaults still route them to replica via auto `readOnly=true`). Do not wrap multi-step service methods.
+- ❌ **device-service** — annotate `getDeviceById`, `getAllDevicesByUserId`, `getTotalDevices` with `@Transactional(readOnly=true)`.
+- ❌ **alert-service** — annotate **only the controller-driven read methods** (e.g. `findByUserIdOrderByCreatedAtDesc`, `countByUserId`). Do **not** annotate the Kafka listener path (`AlertService.energyUsageAlertEvent`) — `readOnly=true` flips Hibernate to `FlushMode.MANUAL` and silently no-ops accidental writes.
 
-### 3.3 Env var wiring
+### 3.3 Env var wiring ❌
 
 Docker Compose `docker-compose.yml` — add to each of the 3 services:
 ```yaml
@@ -253,9 +265,9 @@ Kubernetes `k8s/charts/microservices-chart/templates/configmap-global.yaml`:
 ```
 SPRING_DATASOURCE_REPLICA_URL: jdbc:mysql://infra-mysql-replica.default.svc.cluster.local:3306/energy_tracker
 ```
-Username/password reuse the existing global config + secret (no new keys needed).
+✅ K8s global ConfigMap entry already added. Docker Compose env vars on user/device/alert services still missing.
 
-### 3.4 Validation — Phase 3 (per service)
+### 3.4 Validation — Phase 3 (per service) ❌
 
 After **each** of the three services is rebuilt and redeployed:
 
@@ -290,7 +302,7 @@ After **each** of the three services is rebuilt and redeployed:
 
 ---
 
-## Phase 4 — Final cross-cutting checks
+## Phase 4 — Final cross-cutting checks ❌ NOT STARTED (blocked by Phase 3)
 
 - `kubectl exec infra-mysql-replica-0 -- mysql -uroot -ppassword -e "SELECT @@global.read_only, @@global.super_read_only;"` returns `1, 1` — replica rejects writes at the engine level.
 - Stop the replica (`docker compose stop mysql-replica` / `kubectl scale --replicas=0 statefulset/infra-mysql-replica`) and verify writes still succeed and reads degrade gracefully (HikariCP fails fast on the replica pool, `LazyConnectionDataSourceProxy` does **not** mask this — calls under `readOnly=true` will error). Document this as a known limitation; out-of-scope to add fallback-to-primary behavior.
@@ -307,27 +319,27 @@ After **each** of the three services is rebuilt and redeployed:
 
 ## Critical Files
 
-**Docker Compose (Phase 1)**
-- `docker-compose.yml` — add `mysql-replica` service, mount cnf into `mysql`
-- `docker/mysql/init.sql` — extend with replicator user
-- `docker/mysql/source.cnf` (NEW), `docker/mysql/replica.cnf` (NEW), `docker/mysql/replica-init.sql` (NEW)
+**Docker Compose (Phase 1) — ✅ All done**
+- ✅ `docker-compose.yml` — `mysql-replica` service added, `source.cnf` mounted into `mysql`, `db-data-replica` volume added
+- ✅ `docker/mysql/init.sql` — extended with replicator user
+- ✅ `docker/mysql/source.cnf` (NEW), `docker/mysql/replica.cnf` (NEW), `docker/mysql/replica-init.sql` (NEW)
 
-**Helm (Phase 2)**
-- `k8s/charts/infra-chart/charts/mysql/templates/statefulset.yaml` — mount `source.cnf`
-- `k8s/charts/infra-chart/charts/mysql/templates/configmap.yaml` — add `source.cnf`, `replica.cnf`, `replica-init.sql`
-- `k8s/charts/infra-chart/charts/mysql/templates/secret.yaml` — add `replicator-password`
-- `k8s/charts/infra-chart/charts/mysql/templates/statefulset-replica.yaml` (NEW)
-- `k8s/charts/infra-chart/charts/mysql/templates/service-replica.yaml` (NEW)
-- `k8s/charts/infra-chart/charts/mysql/values.yaml` + `k8s/charts/infra-chart/values.yaml` — `replica.enabled` block
-- `k8s/charts/microservices-chart/templates/configmap-global.yaml` — `SPRING_DATASOURCE_REPLICA_URL`
+**Helm (Phase 2) — ✅ All done**
+- ✅ `k8s/charts/infra-chart/charts/mysql/templates/statefulset.yaml` — `source.cnf` mounted
+- ✅ `k8s/charts/infra-chart/charts/mysql/templates/configmap.yaml` — `source.cnf`, `replica.cnf`, `replica-init.sql` added
+- ✅ `k8s/charts/infra-chart/charts/mysql/templates/secret.yaml` — `replicator-password` added
+- ✅ `k8s/charts/infra-chart/charts/mysql/templates/statefulset-replica.yaml` (NEW)
+- ✅ `k8s/charts/infra-chart/charts/mysql/templates/service-replica.yaml` (NEW)
+- ✅ `k8s/charts/infra-chart/charts/mysql/values.yaml` + `k8s/charts/infra-chart/values.yaml` — `replica.enabled` block
+- ✅ `k8s/charts/microservices-chart/templates/configmap-global.yaml` — `SPRING_DATASOURCE_REPLICA_URL`
 
-**App-side routing (Phase 3)**
-- `services/user-service/src/main/java/com/chieaid24/user_service/config/{DataSourceConfig,RoutingDataSource}.java` (NEW)
-- `services/device-service/src/main/java/com/chieaid24/device_service/config/{DataSourceConfig,RoutingDataSource}.java` (NEW)
-- `services/alert-service/src/main/java/com/chieaid24/alert_service/config/{DataSourceConfig,RoutingDataSource}.java` (NEW)
-- `services/device-service/.../service/DeviceService.java` — add `@Transactional(readOnly=true)` to read methods
-- `services/alert-service/.../service/AlertService.java` — add `@Transactional(readOnly=true)` only on controller-side reads, **not** on the Kafka listener
-- `docker-compose.yml` — three new env vars on the three services
+**App-side routing (Phase 3) — ❌ Nothing done yet**
+- ❌ `services/user-service/src/main/java/com/chieaid24/user_service/config/{DataSourceConfig,RoutingDataSource}.java` (NEW)
+- ❌ `services/device-service/src/main/java/com/chieaid24/device_service/config/{DataSourceConfig,RoutingDataSource}.java` (NEW)
+- ❌ `services/alert-service/src/main/java/com/chieaid24/alert_service/config/{DataSourceConfig,RoutingDataSource}.java` (NEW)
+- ❌ `services/device-service/.../service/DeviceService.java` — add `@Transactional(readOnly=true)` to read methods
+- ❌ `services/alert-service/.../service/AlertService.java` — add `@Transactional(readOnly=true)` only on controller-side reads, **not** on the Kafka listener
+- ❌ `docker-compose.yml` — three new `SPRING_DATASOURCE_REPLICA_*` env vars on user/device/alert services
 
 ## Sources
 
