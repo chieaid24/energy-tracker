@@ -4,15 +4,25 @@ metadata:
   name: {{ .Release.Name }}-global-config
   namespace: {{ .Values.global.namespace }}
 data:
-  # MySQL connection — primary (writes)
-  SPRING_DATASOURCE_URL: "jdbc:mysql://{{ .Values.global.mysql.host }}.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.global.mysql.port }}/{{ .Values.global.mysql.database }}"
+  # MySQL connection — primary (writes).
+  # If global.datasource.urlOverride is set (e.g. EKS overlay pointing at RDS) we use that;
+  # otherwise we derive the URL from global.mysql.* — current Minikube/Compose behavior.
+  SPRING_DATASOURCE_URL: {{ default (printf "jdbc:mysql://%s.%s.svc.cluster.local:%v/%s" .Values.global.mysql.host .Values.global.namespace .Values.global.mysql.port .Values.global.mysql.database) .Values.global.datasource.urlOverride | quote }}
   SPRING_DATASOURCE_USERNAME: {{ .Values.global.mysql.username }}
 
   # MySQL connection — read replica (reads). Apps fall back to primary creds when replica creds are blank.
-  SPRING_DATASOURCE_REPLICA_URL: "jdbc:mysql://{{ .Values.global.mysql.replicaHost }}.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.global.mysql.replicaPort }}/{{ .Values.global.mysql.database }}"
+  SPRING_DATASOURCE_REPLICA_URL: {{ default (printf "jdbc:mysql://%s.%s.svc.cluster.local:%v/%s" .Values.global.mysql.replicaHost .Values.global.namespace .Values.global.mysql.replicaPort .Values.global.mysql.database) .Values.global.datasource.replicaUrlOverride | quote }}
 
-  # Kafka
-  SPRING_KAFKA_BOOTSTRAP_SERVERS: "infra-kafka.{{ .Values.global.namespace }}.svc.cluster.local:9092"
+  # Kafka. Override via global.kafka.bootstrapOverride to point at MSK on EKS.
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: {{ default (printf "infra-kafka.%s.svc.cluster.local:9092" .Values.global.namespace) .Values.global.kafka.bootstrapOverride | quote }}
+  {{- if .Values.global.kafka.iamAuth }}
+  # MSK Serverless IAM authentication. Gated on global.kafka.iamAuth (EKS overlay flips this on).
+  # Requires the aws-msk-iam-auth jar on the classpath of every Kafka client (ingestion, usage, alert).
+  SPRING_KAFKA_PROPERTIES_SECURITY_PROTOCOL: "SASL_SSL"
+  SPRING_KAFKA_PROPERTIES_SASL_MECHANISM: "AWS_MSK_IAM"
+  SPRING_KAFKA_PROPERTIES_SASL_JAAS_CONFIG: "software.amazon.msk.auth.iam.IAMLoginModule required;"
+  SPRING_KAFKA_PROPERTIES_SASL_CLIENT_CALLBACK_HANDLER_CLASS: "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+  {{- end }}
   SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: "org.springframework.kafka.support.serializer.JsonSerializer"
   SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: "org.apache.kafka.common.serialization.StringSerializer"
   SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER: "org.springframework.kafka.support.serializer.JsonDeserializer"
@@ -31,9 +41,12 @@ data:
   INFLUX_ORG: "chieaid24"
   INFLUX_BUCKET: "usage-bucket"
 
-  # Ollama (Spring AI)
+  # Ollama (Spring AI). Insight-service is the only consumer; harmless on services
+  # that don't import Spring AI. Bedrock-equivalent options live on the insight-service
+  # deployment when backend=bedrock.
   SPRING_AI_OLLAMA_BASE_URL: "http://infra-ollama.{{ .Values.global.namespace }}.svc.cluster.local:11434"
   SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL: "qwen2.5:0.5b"
+  SPRING_AI_OLLAMA_CHAT_OPTIONS_NUM_PREDICT: "1024"
 
   # Observability — Metrics
   MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus,metrics"
