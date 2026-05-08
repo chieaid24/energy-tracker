@@ -1,0 +1,127 @@
+name: Build & Push
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: public.ecr.aws/v6r1m8q2
+  NAMESPACE: energy-tracker
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.services.outputs.list }}
+      frontend: ${{ steps.frontend.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            user-service: ['services/user-service/**']
+            device-service: ['services/device-service/**']
+            ingestion-service: ['services/ingestion-service/**']
+            usage-service: ['services/usage-service/**']
+            alert-service: ['services/alert-service/**']
+            insight-service: ['services/insight-service/**']
+            frontend: ['frontend/**']
+
+      - id: services
+        run: |
+          CHANGED=()
+          [[ "${{ steps.filter.outputs.user-service }}" == "true" ]] && CHANGED+=('"user-service"')
+          [[ "${{ steps.filter.outputs.device-service }}" == "true" ]] && CHANGED+=('"device-service"')
+          [[ "${{ steps.filter.outputs.ingestion-service }}" == "true" ]] && CHANGED+=('"ingestion-service"')
+          [[ "${{ steps.filter.outputs.usage-service }}" == "true" ]] && CHANGED+=('"usage-service"')
+          [[ "${{ steps.filter.outputs.alert-service }}" == "true" ]] && CHANGED+=('"alert-service"')
+          [[ "${{ steps.filter.outputs.insight-service }}" == "true" ]] && CHANGED+=('"insight-service"')
+          if [ ${#CHANGED[@]} -eq 0 ]; then
+            echo "list=[]" >> $GITHUB_OUTPUT
+          else
+            echo "list=[$(IFS=,; echo "${CHANGED[*]}")]" >> $GITHUB_OUTPUT
+          fi
+
+      - id: frontend
+        run: echo "changed=${{ steps.filter.outputs.frontend }}" >> $GITHUB_OUTPUT
+
+  build-services:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::714454206433:role/iot-tracker-dev-gha-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR Public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Build and push
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.service }}
+          SHA_TAG=${GITHUB_SHA::7}
+
+          docker build -t $IMAGE:$SHA_TAG -t $IMAGE:latest services/${{ matrix.service }}
+          docker push $IMAGE:$SHA_TAG
+          docker push $IMAGE:latest
+
+      - name: Build insight-service bedrock variant
+        if: matrix.service == 'insight-service'
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.NAMESPACE }}/insight-service
+          SHA_TAG=${GITHUB_SHA::7}
+
+          docker build \
+            --build-arg MAVEN_PROFILE=bedrock \
+            -t $IMAGE:${SHA_TAG}-bedrock \
+            -t $IMAGE:latest-bedrock \
+            services/insight-service
+          docker push $IMAGE:${SHA_TAG}-bedrock
+          docker push $IMAGE:latest-bedrock
+
+  build-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::714454206433:role/iot-tracker-dev-gha-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR Public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Build and push frontend
+        run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.NAMESPACE }}/frontend
+          SHA_TAG=${GITHUB_SHA::7}
+
+          docker build -t $IMAGE:$SHA_TAG -t $IMAGE:latest frontend
+          docker push $IMAGE:$SHA_TAG
+          docker push $IMAGE:latest

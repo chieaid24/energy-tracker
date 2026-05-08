@@ -1,0 +1,99 @@
+name: Deploy to EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: latest)"
+        required: false
+        default: "latest"
+  workflow_run:
+    workflows: ["Build & Push"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-eks
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER_NAME: iot-tracker-dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::714454206433:role/iot-tracker-dev-gha-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy infra chart
+        run: |
+          helm upgrade --install infra ./k8s/charts/infra-chart \
+            -f ./k8s/charts/infra-chart/values-eks.yaml \
+            --wait --timeout 5m
+
+      - name: Deploy observability chart
+        run: |
+          helm upgrade --install observability ./k8s/charts/observability-chart \
+            -f ./k8s/charts/observability-chart/values-eks.yaml \
+            --wait --timeout 5m
+
+      - name: Deploy microservices chart
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          BEDROCK_TAG=${{ steps.tag.outputs.tag }}-bedrock
+
+          helm upgrade --install microservices ./k8s/charts/microservices-chart \
+            -f ./k8s/charts/microservices-chart/values-eks.yaml \
+            --set "user-service.image.tag=$TAG" \
+            --set "device-service.image.tag=$TAG" \
+            --set "ingestion-service.image.tag=$TAG" \
+            --set "usage-service.image.tag=$TAG" \
+            --set "alert-service.image.tag=$TAG" \
+            --set "insightService.image.tag=$BEDROCK_TAG" \
+            --set "frontend.image.tag=$TAG" \
+            --wait --timeout 10m
+
+      - name: Smoke test
+        run: |
+          echo "Checking all deployments are available..."
+          kubectl get deploy -o name | while read deploy; do
+            kubectl rollout status "$deploy" --timeout=120s
+          done
+          echo "All deployments rolled out successfully."
+
+          echo "Checking pod health..."
+          UNHEALTHY=$(kubectl get pods --field-selector=status.phase!=Running,status.phase!=Succeeded -o name 2>/dev/null | wc -l)
+          if [ "$UNHEALTHY" -gt 0 ]; then
+            echo "ERROR: $UNHEALTHY pods not healthy"
+            kubectl get pods --field-selector=status.phase!=Running,status.phase!=Succeeded
+            exit 1
+          fi
+          echo "All pods healthy."
