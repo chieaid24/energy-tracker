@@ -51,4 +51,9 @@ spec:
           configMap:
             name: observability-prometheus-config
         - name: storage
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: observability-prometheus-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}

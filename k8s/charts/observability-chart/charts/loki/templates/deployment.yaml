@@ -48,4 +48,9 @@ spec:
           configMap:
             name: observability-loki-config
         - name: storage
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: observability-loki-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}

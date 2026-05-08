@@ -1,0 +1,30 @@
+prometheus:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClassName: gp3
+
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: gp3
+
+loki:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClassName: gp3
+
+tempo:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClassName: gp3
+
+promtail:
+  enabled: true

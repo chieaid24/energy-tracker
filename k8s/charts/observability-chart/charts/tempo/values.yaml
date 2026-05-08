@@ -1,1 +1,6 @@
 enabled: true
+
+persistence:
+  enabled: false
+  size: 50Gi
+  storageClassName: ""
