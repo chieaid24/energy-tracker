@@ -3,7 +3,8 @@
 > Java Spring Boot microservice-based architecture to handle 500k+ users and 2.5m+ devices. Aggregates energy usage, analyzes + stores time-series IoT data, and produces AI-generated efficiency insights.
 
 ## System Design
-<img width="6288" height="4516" alt="IoT Telemetry System Design" src="https://github.com/user-attachments/assets/74640047-1b3c-47b9-98df-3fb663cf7181" />
+<img width="900" alt="IoT Telemetry System Design" src="https://github.com/user-attachments/assets/c14cc644-de06-4550-b7cb-548b418fd094" />
+
 
 ## Grafana Observability
 
@@ -11,18 +12,19 @@
 |---|---|
 | <img alt="Grafana JVM Metrics" src="https://github.com/user-attachments/assets/fb54b941-55de-4d19-b0a1-071e29329a60" /> | <img alt="Grafana Service Health Overview" src="https://github.com/user-attachments/assets/bd373f3f-f867-47af-905a-bcafced74dfa" /> |
 
-## Tools / Frameworks Used
+## Frontend Demo
+---
+
+## Tools Used
 | Category | Tools |
 | --- | --- |
-| Language / Frameworks | Java 21 (Maven), Spring Boot, Spring Actuator, Spring AI |
-| Database | MySQL, InfluxDB, Flyway |
-| Caching | Redis |
-| Messaging | Apache Kafka |
-| AI Inference | Ollama (gemma3:4b) |
-| Observability | Prometheus, Grafana, Loki, Promtail, Tempo (OpenTelemetry) |
-| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, shadcn/ui |
-| Dev Tools | Docker, Docker Compose, Mailpit |
-| Orchestration | Kubernetes (Minikube), Helm |
+| Backend |   <img src="https://img.shields.io/badge/java-%23ED8B00.svg?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" />   <img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-%236DB33F?style=for-the-badge&logo=springboot&logoColor=%23FFFFFF" /> <img alt="Static Badge" src="https://img.shields.io/badge/Spring%20AI-%23d4aa00?style=for-the-badge&logo=spring&logoColor=%23FFFFFF">|
+| Frontend |   <img alt="Static Badge" src="https://img.shields.io/badge/typescript-%233178C6?style=for-the-badge&logo=typescript&logoColor=%23FFFFFF"> <img alt="Next.js" src="https://img.shields.io/badge/Next.js-black?style=for-the-badge&logo=nextdotjs&logoColor=white" />  <img alt="Static Badge" src="https://img.shields.io/badge/tailwind%20css-%2306B6D4?style=for-the-badge&logo=tailwindcss&logoColor=%23FFFFFF"> |
+| Data Storage |   <img alt="Static Badge" src="https://img.shields.io/badge/MySQL%20(RDS)-%234479A1?style=for-the-badge&logo=mysql&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/InfluxDB-%2322ADF6?style=for-the-badge&logo=influxdb&logoColor=%23FFFFFF" /> <img alt="Static Badge" src="https://img.shields.io/badge/Flyway-%23CC0200?style=for-the-badge&logo=flyway&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/Redis-%23FF4438?style=for-the-badge&logo=redis&logoColor=%23FFFFFF"> |
+| Messaging | <img alt="Static Badge" src="https://img.shields.io/badge/Apache%20Kafka%20(MSK)-%23231F20?style=for-the-badge&logo=apachekafka&logoColor=%23FFFFFF"> |
+| AI Inference | <img alt="Static Badge" src="https://img.shields.io/badge/AWS%20Bedrock-%2301a88d?style=for-the-badge&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/Ollama-%23000000?style=for-the-badge&logo=ollama&logoColor=%23FFFFFF"> |
+| Observability | <img alt="Static Badge" src="https://img.shields.io/badge/prometheus-%23E6522C?style=for-the-badge&logo=prometheus&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/grafana-%23F46800?style=for-the-badge&logo=grafana&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/loki-%23D96800?style=for-the-badge&logoColor=%23FFFFFF"> |
+| Infrastructure |   <img alt="Static Badge" src="https://img.shields.io/badge/kubernetes%20(eks)-%23326CE5?style=for-the-badge&logo=kubernetes&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/helm-%230F1689?style=for-the-badge&logo=helm&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/Docker-%232496ED?style=for-the-badge&logo=docker&logoColor=%23FFFFFF" />     <img alt="Static Badge" src="https://img.shields.io/badge/terraform-%23844FBA?style=for-the-badge&logo=terraform&logoColor=%23FFFFFF">   <img alt="Static Badge" src="https://img.shields.io/badge/GitHub%20Actions-%232088FF?style=for-the-badge&logo=githubactions&logoColor=%23FFFFFF">|
 
 ## Technical Highlights
 - Event-driven pipeline with **Kafka decoupling** ingestion, processing, and alerting across three topics.
