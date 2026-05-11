@@ -108,6 +108,8 @@ frontend:
   enabled: true
   replicas: 1
   resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
+  authUrl: "https://energy.aidanchien.com"
+  nextPublicApiUrl: "https://energy.aidanchien.com"
   auth:
     nextauthSecret: "set-via-external-secrets"
     googleClientId: "set-via-external-secrets"

@@ -53,7 +53,7 @@ spec:
         - name: AUTH_TRUST_HOST
           value: "true"
         - name: AUTH_URL
-          value: "http://localhost"
+          value: {{ .Values.authUrl | default "http://localhost" | quote }}
         - name: NEXTAUTH_SECRET
           valueFrom:
             secretKeyRef:
@@ -62,7 +62,7 @@ spec:
         - name: BACKEND_URL
           value: "http://{{ .Release.Name }}-user-service.{{ .Values.global.namespace }}.svc.cluster.local:8080"
         - name: NEXT_PUBLIC_API_URL
-          value: ""
+          value: {{ .Values.nextPublicApiUrl | default "" | quote }}
         - name: GOOGLE_CLIENT_ID
           valueFrom:
             secretKeyRef:
