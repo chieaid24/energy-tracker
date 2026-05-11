@@ -32,6 +32,13 @@ spec:
             name: {{ .Release.Name }}-user-service
             port:
               number: {{ .Values.userService.port }}
+      - path: /api/v1/auth(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: {{ .Release.Name }}-user-service
+            port:
+              number: {{ .Values.userService.port }}
       {{- end }}
       {{- if .Values.deviceService.enabled }}
       - path: /api/v1/device(/|$)(.*)

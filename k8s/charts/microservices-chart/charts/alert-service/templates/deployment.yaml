@@ -15,6 +15,7 @@ spec:
       labels:
         app: alert-service
     spec:
+      {{- if not .Values.global.skipInitContainers }}
       initContainers:
       - name: wait-for-mysql
         image: busybox:1.36
@@ -88,6 +89,7 @@ spec:
 
           echo "ERROR: Timeout waiting for Mailpit after ${TIMEOUT} seconds"
           exit 1
+      {{- end }}
       containers:
       - name: alert-service
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

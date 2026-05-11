@@ -65,15 +65,32 @@ Updated as work progresses. Anything not listed below is pending and untouched.
   - **Validated**: GHA OIDC handshake via `environment:dev`, ECR Public auth + push, Maven profile switch (ollama/bedrock), dual-tag pattern.
   - **Not yet exercised**: dorny/paths-filter detection, matrix strategy, the `push: branches: [main]` trigger — these will fire naturally when `aws-migration` merges to `main`.
 
+- **Phase 7 ✅ (validated 2026-05-11)** — First deploy + end-to-end validation complete:
+  - 7A: infra (InfluxDB, Redis, Mailpit) + observability (Prometheus, Grafana, Loki, Tempo, Promtail) all Running.
+  - 7B: All 7 microservices + frontend Running (16 pods total, 0 restarts). Helm rev 5.
+  - 7C: End-to-end pipeline validated:
+    - User registration + auth: `POST /api/v1/auth/register` → JWT issued ✓
+    - Device creation: `POST /api/v1/device/create` → stored in RDS ✓
+    - Ingestion → MSK (energy-usage) → usage-service → InfluxDB ✓
+    - Alert pipeline: usage-service → MSK (energy-alerts) → alert-service → stored + sent ✓
+    - Usage query: `GET /api/v1/usage/{userId}` returns aggregated data from InfluxDB ✓
+    - Frontend: HTTPS returns 307 → /login (NextAuth working) ✓
+    - **Blocker**: insight-service Bedrock inference blocked (daily token quota = 0). Service is healthy, IRSA attached, but falls back to Ollama (not available on EKS). Requires Service Quotas approval.
+  - 7D: Observability confirmed:
+    - Prometheus: 6/6 targets `up=1` ✓
+    - Loki: ingesting logs from all namespaces ✓
+    - Tempo: pod Running (trace export from services fails due to port issue — non-blocking) ✓
+  - Fixes applied during Phase 7:
+    - `global.skipInitContainers: true` — disables init containers waiting for in-cluster infra
+    - `replicaUrlOverride` set to RDS endpoint (was empty → falling back to non-existent `infra-mysql-replica`)
+    - MSK topics `energy-usage` + `energy-alerts` created via AdminClient (MSK Serverless doesn't auto-create)
+    - Ingress `/api/v1/auth` route added for auth endpoints
+    - Observability chart fsGroup fixes for EBS PVC permissions
+    - CPU requests reduced to 100m to fit 2x t3.large node group
+
 **Outstanding inputs needed from operator:**
 
-1. **Bedrock daily quota** — Service Quotas request submitted but not yet approved. Account currently has 0 daily token cap → every Bedrock invocation throttles. Phase 7C insight-service smoke test blocks on this; the rest of Phase 7 does not.
-2. **Domain NS delegation update** — Route53 zone was recreated on 2026-05-11 with new NS records. Porkbun currently delegates to the OLD (deleted) zone. New NS records to set at Porkbun under host `energy`, type NS:
-   - `ns-1204.awsdns-22.org`
-   - `ns-1825.awsdns-36.co.uk`
-   - `ns-299.awsdns-37.com`
-   - `ns-875.awsdns-45.net`
-   Verify with `dig +short NS energy.aidanchien.com`. Blocks Phase 7 ingress/TLS.
+1. **Bedrock daily quota** — Service Quotas request submitted but not yet approved. Account currently has 0 daily token cap → every Bedrock invocation throttles. Insight-service smoke test is the only remaining blocker.
 
 **Where to read code/docs to pick up this work:**
 

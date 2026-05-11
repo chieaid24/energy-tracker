@@ -18,6 +18,7 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ default (printf "%s-insight-service" .Release.Name) .Values.serviceAccount.name }}
       {{- end }}
+      {{- if not .Values.global.skipInitContainers }}
       initContainers:
       {{- if eq .Values.backend "ollama" }}
       - name: wait-for-ollama
@@ -69,6 +70,7 @@ spec:
 
           echo "ERROR: Timeout waiting for usage-service after ${TIMEOUT} seconds"
           exit 1
+      {{- end }}
       containers:
       - name: insight-service
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

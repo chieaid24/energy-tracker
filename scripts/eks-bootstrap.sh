@@ -8,8 +8,8 @@ set -euo pipefail
 CLUSTER_NAME="iot-tracker-dev"
 REGION="us-east-1"
 ACCOUNT_ID="714454206433"
-VPC_ID="vpc-0f217f3adb70f565f"
-ROUTE53_ZONE_ID="Z050509095PF9UEA4RVL"
+VPC_ID="vpc-0c6e4ba705e38e8c5"
+ROUTE53_ZONE_ID="Z00680271D3YUMV51OPOE"
 DOMAIN="energy.aidanchien.com"
 
 echo ">>> Creating gp3 StorageClass..."

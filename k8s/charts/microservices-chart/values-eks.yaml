@@ -22,6 +22,7 @@ ingress:
 
 global:
   namespace: default
+  skipInitContainers: true
 
   # MySQL section is left in place for compatibility, but datasource.urlOverride below
   # is what the configmap actually reads on EKS.
@@ -37,10 +38,10 @@ global:
 
   datasource:
     urlOverride: "jdbc:mysql://iot-tracker-dev-mysql.c0fwkuqqyner.us-east-1.rds.amazonaws.com:3306/energy_tracker"
-    replicaUrlOverride: ""
+    replicaUrlOverride: "jdbc:mysql://iot-tracker-dev-mysql.c0fwkuqqyner.us-east-1.rds.amazonaws.com:3306/energy_tracker"
 
   kafka:
-    bootstrapOverride: "boot-hjzsop5w.c3.kafka-serverless.us-east-1.amazonaws.com:9098"
+    bootstrapOverride: "boot-m6cdfpta.c3.kafka-serverless.us-east-1.amazonaws.com:9098"
     iamAuth: true
 
   secrets:
@@ -56,33 +57,39 @@ global:
   jwt:
     secret: "set-via-external-secrets"
 
-# Stateless services scaled up; ingestion + insight stay at 1 (single producer / single
-# narrator is fine for now).
+# Start with 1 replica each for initial validation; scale up once stable.
+# CPU requests reduced from 250m to 100m to fit 2x t3.large node group.
 userService:
   enabled: true
-  replicas: 2
+  replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
 
 deviceService:
   enabled: true
-  replicas: 2
+  replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
 
 ingestionService:
   enabled: true
   replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
 
 usageService:
   enabled: true
-  replicas: 2
+  replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
 
 alertService:
   enabled: true
-  replicas: 2
+  replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
 
 # insight-service is referenced via the alias `insightService` (set in Chart.yaml).
 # Values here flow into the subchart.
 insightService:
   enabled: true
   replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
   backend: bedrock
   bedrock:
     modelId: us.anthropic.claude-haiku-4-5-20251001-v1:0
@@ -99,7 +106,8 @@ insightService:
 
 frontend:
   enabled: true
-  replicas: 2
+  replicas: 1
+  resources: {requests: {memory: "256Mi", cpu: "100m"}, limits: {memory: "512Mi", cpu: "500m"}}
   auth:
     nextauthSecret: "set-via-external-secrets"
     googleClientId: "set-via-external-secrets"
