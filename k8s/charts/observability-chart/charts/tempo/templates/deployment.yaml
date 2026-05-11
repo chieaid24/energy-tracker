@@ -49,4 +49,9 @@ spec:
           configMap:
             name: observability-tempo-config
         - name: storage
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: observability-tempo-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}

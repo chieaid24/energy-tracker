@@ -6,6 +6,30 @@ image:
 port: 8085
 replicas: 1
 
+# Which Spring AI starter the running image was built with, and what backend
+# the runtime should target.
+#   ollama  — current Compose / Minikube default. Hits the in-cluster Ollama service.
+#   bedrock — EKS overlay. Hits AWS Bedrock Converse via IRSA. No Ollama init container.
+backend: ollama
+
+bedrock:
+  # Cross-region inference profile (us.) — the only invocation pattern Haiku 4.5 supports.
+  # Bedrock routes traffic across us-east-1, us-east-2, us-west-2; IAM policy in Terraform
+  # grants foundation-model invoke in all three.
+  modelId: us.anthropic.claude-haiku-4-5-20251001-v1:0
+  region: us-east-1
+  # Token budget. Mirrors the numPredict(1024) the Java config used to set for Ollama.
+  maxTokens: "1024"
+  temperature: "0.4"
+  topP: "0.5"
+
+# IRSA-enabled ServiceAccount for the bedrock backend. When backend=ollama and
+# serviceAccount.create is false, the deployment uses the namespace default SA.
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
 resources:
   requests:
     memory: "256Mi"

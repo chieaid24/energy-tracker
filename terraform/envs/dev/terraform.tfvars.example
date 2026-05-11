@@ -1,0 +1,33 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+region       = "us-east-1"
+project      = "iot-tracker"
+env          = "dev"
+cluster_name = "iot-tracker-dev"
+
+# ---------- Domain ----------
+# Apex domain you own. If empty, Route53 + ACM are skipped.
+# After apply, copy `route53_zone_name_servers` output and add NS records
+# at your registrar (or parent zone) to delegate the subdomain.
+domain_apex      = ""
+domain_subdomain = "iot"
+
+# ---------- Cluster access ----------
+# Lock down to your laptop's public IP /32 in production.
+# Open here for dev convenience.
+allowed_admin_cidrs = ["0.0.0.0/0"]
+
+# ---------- GitHub Actions OIDC ----------
+# Set to false if your AWS account already has the GitHub OIDC provider.
+create_github_oidc_provider = true
+github_repo                 = "chieaid24/IoT-Energy-Tracker"
+
+# ---------- Optional sizing overrides ----------
+# node_group_instance_types = ["t3.large"]
+# node_group_desired_size   = 2
+# rds_instance_class        = "db.t3.medium"
+# rds_allocated_storage     = 20
+
+tags = {
+  Owner = "chieaid24"
+}

@@ -52,4 +52,9 @@ spec:
           configMap:
             name: observability-grafana-dashboards
         - name: storage
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: observability-grafana-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}

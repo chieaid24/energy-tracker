@@ -1,5 +1,13 @@
 ingress:
   enabled: true
+  className: nginx
+  # When host is empty (default) the Ingress matches all hosts — current Minikube behavior.
+  host: ""
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  tls:
+    enabled: false
+    secretName: ""
 
 global:
   namespace: default
@@ -13,6 +21,35 @@ global:
     database: energy_tracker
     username: root
     password: password
+
+  # When set, overrides SPRING_DATASOURCE_URL in the global ConfigMap.
+  # Used by the EKS overlay to point at RDS instead of in-cluster MySQL.
+  # Leave empty to keep the in-cluster URL derived from global.mysql.* above.
+  datasource:
+    urlOverride: ""
+    replicaUrlOverride: ""
+
+  # When set, overrides SPRING_KAFKA_BOOTSTRAP_SERVERS.
+  # Used by the EKS overlay to point at MSK Serverless.
+  kafka:
+    bootstrapOverride: ""
+    # When true, the global ConfigMap renders SASL_SSL + AWS_MSK_IAM properties
+    # required to authenticate against MSK Serverless. Default false keeps the
+    # in-cluster Kafka (PLAINTEXT) behavior unchanged for Minikube/Compose.
+    iamAuth: false
+
+  # Secret delivery mode.
+  # - "inline":   render Secret resources from values (current Minikube/Compose behavior)
+  # - "external": render ExternalSecret resources that pull from AWS Secrets Manager
+  secrets:
+    mode: inline
+    external:
+      secretStoreRef: aws-secrets-manager
+      # Path prefix in Secrets Manager. ExternalSecrets resolve:
+      #   <path>/global   -> microservices-global-secret
+      #   <path>/frontend -> microservices-frontend-secret
+      path: iot/dev
+      refreshInterval: 1h
 
   influx:
     token: my-token

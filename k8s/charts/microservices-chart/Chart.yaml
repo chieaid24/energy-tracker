@@ -24,6 +24,7 @@ dependencies:
   - name: insight-service
     version: "0.1.0"
     condition: insightService.enabled
+    alias: insightService
   - name: frontend
     version: "0.1.0"
     condition: frontend.enabled
