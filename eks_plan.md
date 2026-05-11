@@ -10,19 +10,20 @@ Approval is one of: an explicit "go" / "continue" / "next phase" / "proceed", or
 
 This applies regardless of how confident the work looks — every phase boundary is a checkpoint where the user reviews diffs, costs, and direction. Sub-phases inside a phase (e.g. 1A → 1B) flow continuously without waiting; only the **inter-phase** boundaries require approval.
 
-## Current state (snapshot 2026-05-08)
+## Current state (snapshot 2026-05-11)
 
 Updated as work progresses. Anything not listed below is pending and untouched.
 
 - **Phase 0 ✅** — `terraform 1.15.2` installed via tfenv; AWS creds active (account `714454206433`, IAM user `IoTEnergyTracker`, region `us-east-1`); Bedrock Haiku 4.5 model access granted but quota at 0.
-- **Phase 1 ✅** — `terraform apply` completed. All infrastructure live in `us-east-1`:
-  - VPC `vpc-0f217f3adb70f565f` (3 public, 3 private, 3 DB subnets, NAT gateway)
+- **Phase 1 ✅** — re-applied 2026-05-11 (115 resources, ~8 min wall clock). All infrastructure live in `us-east-1`:
+  - VPC `vpc-0c6e4ba705e38e8c5` (3 public, 3 private, 3 DB subnets, NAT gateway)
   - EKS cluster `iot-tracker-dev` (K8s 1.31, 2x t3.large nodes, OIDC enabled)
   - RDS MySQL 8.0.44 at `iot-tracker-dev-mysql.c0fwkuqqyner.us-east-1.rds.amazonaws.com:3306/energy_tracker`
-  - MSK Serverless at `boot-hjzsop5w.c3.kafka-serverless.us-east-1.amazonaws.com:9098` (IAM auth)
-  - Route53 zone `energy.aidanchien.com` (NS delegated from Porkbun)
+  - MSK Serverless (get bootstrap brokers via `terraform output -raw msk_bootstrap_brokers`)
+  - Route53 zone `Z00680271D3YUMV51OPOE` for `energy.aidanchien.com` — **NS delegation at Porkbun is STALE** (points at deleted zone from previous destroy/apply cycle). New NS records:
+    - `ns-1204.awsdns-22.org`, `ns-1825.awsdns-36.co.uk`, `ns-299.awsdns-37.com`, `ns-875.awsdns-45.net`
   - ACM cert issued for `energy.aidanchien.com` + `*.energy.aidanchien.com`
-  - 7 IRSA roles created
+  - 7 IRSA roles created (incl. `iot-tracker-dev-gha-deploy` for GitHub Actions OIDC)
   - Secrets Manager: `iot/dev/rds/master`
   - Note: original `rds_engine_version` 8.0.39 unavailable in us-east-1; changed to 8.0.44
 - **Phase 3 ✅** — chart parameterization + Bedrock swap done. Notable extensions beyond the original plan:
@@ -53,19 +54,26 @@ Updated as work progresses. Anything not listed below is pending and untouched.
   - Note: ExternalSecret templates updated from `v1beta1` to `v1` (ESO v1 doesn't serve beta API).
   - Note: Google OAuth secrets are placeholders — update via `aws secretsmanager put-secret-value` when ready.
 
-- **Phase 6 ✅ (code complete, untested)** — CI/CD workflows authored:
-  - `build-and-push.yml`: OIDC auth, change detection via `dorny/paths-filter`, SHA + latest tags, insight-service dual-build (ollama + bedrock variant).
-  - `deploy-eks.yml`: OIDC auth, deploys infra → observability → microservices with SHA-pinned tags. Concurrency group prevents overlapping deploys. Triggers on workflow_dispatch + build success.
-  - Old `ci.yaml` disabled (renamed `.disabled`). GHA OIDC role trust policy verified.
+- **Phase 6 ✅ (validated 2026-05-11)** — CI/CD workflows authored AND core mechanics validated out-of-band:
+  - `build-and-push.yml`: OIDC auth, change detection via `dorny/paths-filter`, SHA + latest tags, insight-service dual-build (ollama + bedrock variant). On `aws-migration` only; not on `main` yet.
+  - `deploy-eks.yml`: OIDC auth, deploys infra → observability → microservices with SHA-pinned tags. Concurrency group prevents overlapping deploys. Triggers on workflow_dispatch + build success. On `aws-migration` only.
+  - `build-test.yml`: manual `workflow_dispatch` workflow (also on `main` as commit `a506d30`) used to validate Phase 6 before merge. Single-service input, SHA-tagged only, no `:latest` push. Uses `environment: dev` to satisfy gha-deploy OIDC trust from non-main branches. Kept on `main` as a permanent manual-rebuild utility.
+  - Old `ci.yaml` disabled (renamed `.disabled`). GHA OIDC role trust policy: `refs/heads/main`, `refs/tags/v*`, `environment:dev`.
   - `values-eks.yaml` updated with hardcoded RDS/MSK endpoints and correct TLS secret name (`iot-tls`).
   - ExternalSecret templates updated to `v1` API (from `v1beta1`).
-  - **Cannot fully validate until branch is merged to main and workflows run.** Post-merge gates: build green, deploy green, no `:latest` in deployed manifests.
+  - **Validation run on 2026-05-11**: user-service build via `build-test.yml` GREEN; insight-service dual-build GREEN (1m47s for both variants). All 3 test images pushed to ECR, deleted after verification.
+  - **Validated**: GHA OIDC handshake via `environment:dev`, ECR Public auth + push, Maven profile switch (ollama/bedrock), dual-tag pattern.
+  - **Not yet exercised**: dorny/paths-filter detection, matrix strategy, the `push: branches: [main]` trigger — these will fire naturally when `aws-migration` merges to `main`.
 
 **Outstanding inputs needed from operator:**
 
-1. **Bedrock daily quota** — submit a Service Quotas request for `Cross-region model inference tokens per minute for Anthropic Claude Haiku 4.5` (any value at-or-below the 5,000,000 default; AWS auto-approves). Account currently has 0 daily token cap → every Bedrock invocation throttles. Phase 7 smoke test blocks on this; phases 1–6 do not.
-2. **Domain NS delegation** — apex `aidanchien.com` stays at Porkbun. After `terraform apply`, copy the 4 NS records from `terraform output route53_zone_name_servers` and add them at Porkbun as NS records for the `energy` subdomain.
-3. **`terraform apply` go-ahead** — will provision VPC + EKS + RDS + MSK + Route53/ACM + IRSA + GitHub OIDC. First apply is ~25 min and the running cost is ~$355/mo at idle.
+1. **Bedrock daily quota** — Service Quotas request submitted but not yet approved. Account currently has 0 daily token cap → every Bedrock invocation throttles. Phase 7C insight-service smoke test blocks on this; the rest of Phase 7 does not.
+2. **Domain NS delegation update** — Route53 zone was recreated on 2026-05-11 with new NS records. Porkbun currently delegates to the OLD (deleted) zone. New NS records to set at Porkbun under host `energy`, type NS:
+   - `ns-1204.awsdns-22.org`
+   - `ns-1825.awsdns-36.co.uk`
+   - `ns-299.awsdns-37.com`
+   - `ns-875.awsdns-45.net`
+   Verify with `dig +short NS energy.aidanchien.com`. Blocks Phase 7 ingress/TLS.
 
 **Where to read code/docs to pick up this work:**
 
