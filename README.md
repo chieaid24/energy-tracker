@@ -7,7 +7,7 @@ Stores, processes, and delivers real-time alerts and AI insights.
 
 Built for real production workloads with AWS Elastic Kubernetes Service, microservices, and end-to-end observability.
 
-> Live deployment is down to save on cost, see Costs for details
+> Live deployment is down to save on cost, see [Costs](#aws-management-costs) for details
 
 
 [![Github Release](https://img.shields.io/github/v/release/chieaid24/energy-tracker)](https://github.com/chieaid24/energy-tracker/releases)
@@ -18,12 +18,12 @@ Built for real production workloads with AWS Elastic Kubernetes Service, microse
 </p>
 
 ## Technical Highlights
-- Provisioned AWS footprint as **100% Infrastructure-as-Code** with Terraform, a 3-AZ VPC, **EKS** cluster, **RDS MySQL**, **MSK Serverless**, Route53, and ACM.
-- Deployed **cloud-native Kubernetes** stack with HPA autoscaling, PodDisruptionBudgets, and health-probed rolling deploys fronted by AWS Load Balancer Controller.
-- Built **fully automated CI/CD** pipeline with GitHub Actions that rebuilds changed services, pushes to ECR, and deploys to EKS via Helm.
+- Provisioned AWS footprint as **100% Infrastructure-as-Code** with Terraform, deployed through Helm.
+- Deployed **cloud-native Kubernetes** cluster with HPA autoscaling, self-healing, and rolling deploys.
+- Built **automated CI/CD** pipeline with GitHub Actions that rebuilds changed services, pushes to ECR, and deploys to EKS.
 - Implemented **full observability stack** with tracing, log aggregation, and metrics collected in Grafana.
 - Designed **scalable database layer** with MySQL + read replicas for relational data and InfluxDB for time-series usage analytics.
-- Maintained **zero-secret codebase** by storing credentials in **AWS Secrets Manager** and syncing to cluster via IRSA-bound role. Nothing sensitive in Git or container images.
+- Maintained **zero-secret codebase** by storing credentials in **AWS Secrets Manager** and syncing to cluster via IRSA-bound role.
 
 
 
@@ -35,12 +35,12 @@ Built for real production workloads with AWS Elastic Kubernetes Service, microse
 
 ## Functional Overview
 
-- Ingests real-time power readings from **Shelly smart plugs** (or a built-in multi-threaded simulator) via REST into Kafka, carrying device ID, wattage, and timestamp.
-- Stores consumption data as **time-series in InfluxDB**, enabling efficient hourly/daily/weekly aggregations and per-device range queries.
-- Emits **threshold-based alerts** when usage exceeds configured limits — alert-service persists the event in MySQL and sends an email notification via SMTP.
-- Generates **AI-powered energy insights** by polling recent usage data and sending it to an LLM (Ollama locally, Bedrock on EKS) for efficiency recommendations with confidence scores.
-- Serves a **real-time Next.js dashboard** with live summary cards, per-device energy charts, alert history, and an AI insights panel — all polling backend services continuously.
-- Manages **users and devices** through JWT-secured REST APIs with Google OAuth + credentials login and inter-service ownership validation.
+- Ingests real-time power readings from IoT devices in a user's home through REST into Kafka.
+  - Stores consumption data as **time-series in InfluxDB**, enabling hourly/daily/weekly aggregations and per-device range queries.
+- Emits **threshold-based alerts** when usage exceeds configured limits, alert-service sends an email notification with SMTP and persists in MySQL.
+- Generates **AI-powered energy insights** by polling recent usage data and sending it to an LLM (Ollama locally, Bedrock on EKS) for sustainability-focused efficiency recommendations.
+- **Real-time Next.js dashboard** with live summary cards, per-device energy charts, alert history, and an AI insights panel, polling backend services continuously.
+  - Manages sign-in and user management with **JWT-secured REST APIs** and Google OAuth + encrypted at rest data storage.
 
 
 ## Tools Used
@@ -57,7 +57,7 @@ Built for real production workloads with AWS Elastic Kubernetes Service, microse
 ## AWS-Specific Architecture
 
 Application runs on AWS EKS with managed RDS and MSK Serverless. 
-- All 7 services autoscale via HPA (2-5 replicas) and survive node drains with PodDisruptionBudgets. 
+- All 7 services autoscale with HPA (2-5 replicas) and survive node drains with PodDisruptionBudgets. 
 - Infrastructure defined in Terraform, and deployments use the same Helm charts with EKS-specific value overlays.
 - IRSA roles for pod level IAM, eliminating shared node roles and static credentials.
 
@@ -72,7 +72,7 @@ Application runs on AWS EKS with managed RDS and MSK Serverless.
         │           │            │           │            │
     frontend   user-svc    device-svc   usage-svc    ... (7 svcs)
         │           │            │           │            │
-        └──────── inter-service via ClusterIP DNS ────────┘
+        └──────── inter-service with ClusterIP DNS ────────┘
                      │                    │
                      ▼                    ▼
                  RDS MySQL           MSK Serverless
@@ -83,53 +83,55 @@ Application runs on AWS EKS with managed RDS and MSK Serverless.
 
 ## Feature Details
 
-<details>
-<summary><h3>Cost</h3></summary>
 
-| Component | Spec | Monthly |
-|---|---|---|
-| EKS control plane | K8s 1.31, standard support | $73.00 |
-| EC2 nodes | 3× t3.large @ $0.0832/hr | $182.21 |
-| RDS instance | db.t3.medium MySQL, single-AZ @ $0.068/hr | $49.64 |
-| RDS storage | gp3, ~20 GB allocated @ $0.115/GB | $2.30 |
-| **MSK Serverless cluster** | Flat $0.75/cluster-hr | $547.50 |
-| MSK Serverless partitions | ~10 partitions @ $0.0015/hr | $10.95 |
-| NAT Gateway | 1× @ $0.045/hr + data processing | ~$34 |
-| NLB | Base @ $0.0225/hr + minimal LCU | ~$21 |
-| EBS gp3 | 7 in-cluster PVCs + 3 node roots (~130 GB) | ~$11 |
-| Secrets Manager | 3 secrets @ $0.40/mo + API calls | $1.20 |
-| Route53 hosted zone | 1 zone | $0.50 |
-| CloudWatch | 4 alarms (free tier), basic metrics/logs | ~$3 |
-| ACM certificates | Public certs are free | $0 |
-| Bedrock (Haiku 4.5) | Pay-per-token, low personal usage | ~$1–5 |
-| Data transfer out | Internet egress | ~$1–3 |
-| **Total** | | **~$940/mo** |
-
-> Production environment is currently spun down. All infrastructure reproducible via `terraform apply` + `helm install` (see [Deploying to AWS EKS](#)).
-</details>
 
 <details>
-<summary><strong>Services</strong></summary>
+<summary><strong>⚙️ Services</strong></summary>
 
-| Service | Port | Persistence | Notes |
+| Service | Port | Persistence | What it does |
 |---|---|---|---|
-| user-service | 8080 | MySQL (primary + replica) | Flyway migrations, LoggingAspect, ExecutionTimeAspect, replica-routed reads |
-| device-service | 8081 | MySQL (primary + replica) | Inter-service calls to user-service, replica-routed reads |
-| ingestion-service | 8082 | — | Kafka producer, multi-threaded event simulator |
-| usage-service | 8083 | InfluxDB, Redis | Kafka consumer, Redis read cache + scheduler lock, emits alert events |
-| alert-service | 8084 | MySQL (primary + replica) | Kafka consumer, Spring Mail via Mailpit, replica-routed reads |
-| insight-service | 8085 | — | Spring AI + Ollama (local) or Bedrock (EKS), polls usage-service |
+| user-service | 8080 | MySQL (primary + replica) | Handles registration, login, JWT issuance, and user profile CRUD. Flyway-managed schema, read replicas for query scaling. |
+| device-service | 8081 | MySQL (primary + replica) | Manages IoT device registration and ownership. Validates users through inter-service REST calls. |
+| ingestion-service | 8082 | - | Accepts energy readings via REST and publishes them to Kafka. Includes multi-threaded simulator for load testing. |
+| usage-service | 8083 | InfluxDB, Redis | Consumes readings from Kafka, stores time-series data in InfluxDB, caches queries in Redis, and creates alert events when thresholds are exceeded. |
+| alert-service | 8084 | MySQL (primary + replica) | Consumes alert events from Kafka, persists them, and sends email notifications with SMTP. |
+| insight-service | 8085 | - | Polls recent usage data and sends it to an LLM (Ollama locally, Bedrock on EKS) to generate energy efficiency recommendations. |
+
+</details>
+
+
+<details>
+<summary><strong>🎨 Frontend</strong></summary>
+
+Next.js dashboard (App Router, TypeScript, Tailwind, shadcn/ui) served through nginx reverse proxy.
+
+### Auth
+
+- **Google OAuth 2.0 + credentials login** through NextAuth.js - backend validates tokens and issues HMAC-SHA signed JWTs (24h expiry).
+- **Route protection** - middleware redirects unauthenticated users, stateless backend with no server-side sessions.
+
+### Pages
+
+| Route | Description |
+|---|---|
+| `/login` | Email/password + Google OAuth sign-in |
+| `/register` | Account registration (auto-signs in on success) |
+| `/dashboard` | Summary cards, energy bar chart, AI insights panel |
+| `/dashboard/devices` | Device table, embedded InfluxDB explorer |
+| `/dashboard/alerts` | Email alert inbox |
+
+### Dashboard Components
+
+- **Summary Cards** - device count, 7-day energy consumption, alert count (live polling).
+- **Energy Chart** - per-device 7-day consumption bar chart using Recharts.
+- **AI Insights Panel** - LLM-generated efficiency recommendations with confidence scores.
 
 </details>
 
 <details>
-<summary><strong>Observability</strong></summary>
+<summary><strong>🔍 Observability</strong></summary>
 
-## Observability
-
-All 6 services are fully instrumented across three observability pillars, correlated in Grafana.
-
-### Architecture
+All 6 services are tracked across the three pillars, all aggregated in Grafana.
 
 ```
 Spring Boot Services
@@ -138,82 +140,24 @@ Spring Boot Services
   └── stdout JSON (ECS format) ─► Promtail ─► Loki ─────────► Grafana
 ```
 
-### Metrics
-- Micrometer + `micrometer-registry-prometheus` on all services.
-- Prometheus scrapes `/actuator/prometheus` from all 6 services every 15s.
-- JVM, HTTP, and Kafka consumer/producer metrics collected out of the box.
+- **Metrics** - Prometheus scrapes all 6 services every 15s (JVM, HTTP, Kafka producer/consumer).
+- **Tracing** - OpenTelemetry traces pushed to Tempo, with trace context propagated across Kafka spans.
+- **Logs** - Structured JSON to stdout, collected by Promtail into Loki. Log-to-trace correlation in Grafana.
 
-### Distributed Tracing
-- Boot 4.x services: `spring-boot-starter-opentelemetry` — traces pushed via OTLP HTTP to Tempo.
-- Boot 3.x (insight-service): `micrometer-tracing-bridge-otel` + `opentelemetry-exporter-otlp`.
-- Kafka observation enabled: trace context propagated across all producer/consumer spans.
-- 100% sampling rate in local dev (`MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0`).
-
-### Logs
-- All services emit **ECS-formatted JSON** to stdout (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`).
-- Promtail uses Docker SD to collect container logs and extract `level`, `service`, `traceId`, and `spanId` as Loki labels.
-- Log-to-trace correlation works in Grafana — click a log line to jump to the matching Tempo trace.
-
-### Dashboards (provisioned, no manual setup)
+### Provisioned Dashboards
 | Dashboard | Description |
 |---|---|
 | Service Health Overview | HTTP request rates, error rates, latency per service |
 | JVM Metrics | Heap, GC pause, thread count per service |
-| Kafka Event Pipeline | Producer/consumer lag, throughput for `energy-usage` and `energy-alerts` topics |
+| Kafka Event Pipeline | Producer/consumer lag, throughput per topic |
 | IoT Business Metrics | Device count, energy readings, alert frequency |
 
-### Observability Ports (Docker Compose)
-| Service | Port |
-|---|---|
-| Prometheus | `localhost:9090` |
-| Grafana | `localhost:3001` (iot-energy / password) |
-| Loki | `localhost:3100` |
-| Tempo | `localhost:3200` |
-
 </details>
 
 <details>
-<summary><strong>Frontend</strong></summary>
+<summary><strong>🚀 CI/CD Pipeline</strong></summary>
 
-## Frontend
-
-Next.js 16 dashboard (App Router, TypeScript, Tailwind CSS v4, shadcn/ui) served through nginx reverse proxy.
-
-### Authentication & Security
-
-- **Google OAuth 2.0** via NextAuth.js — Google ID tokens are forwarded to `user-service /api/v1/auth/google`, which validates them against Google's `tokeninfo` endpoint and verifies audience (`aud`) claim against the configured client ID. New users are auto-provisioned on first Google sign-in.
-- **Credentials login** — email/password verified against BCrypt-hashed passwords in MySQL. Passwords are never stored in plaintext.
-- **JWT session strategy** — on successful login (either provider), user-service issues an HMAC-SHA signed JWT (24h expiry) containing `userId`, `email`, and `name`. NextAuth stores this token server-side in an encrypted session cookie and attaches it as a `Bearer` token on all backend API calls via a server-side `fetchApi` helper.
-- **Route protection** — NextAuth middleware redirects unauthenticated users to `/login` for all `/dashboard/*` routes. Client-side `useSession` provides an additional guard.
-- **Stateless backend** — Spring Security configured with `SessionCreationPolicy.STATELESS` and CSRF disabled (API-only, no browser session cookies).
-
-### Pages
-
-| Route | Description |
-|---|---|
-| `/login` | Email/password + Google OAuth sign-in |
-| `/register` | Account registration (auto-signs in on success) |
-| `/dashboard` | Summary cards, energy bar chart (Recharts), AI insights panel |
-| `/dashboard/devices` | Device table, embedded InfluxDB explorer |
-| `/dashboard/alerts` | Embedded Mailpit inbox for email alerts |
-
-### Dashboard Components
-
-- **Summary Cards** — device count, 7-day energy consumption (kWh), and alert count with animated bell on new alerts. Energy/device data polls every 5s, alerts poll every 1s.
-- **Energy Chart** — per-device 7-day energy consumption bar chart via Recharts, polling usage-service every 5s.
-- **AI Insights Panel** — Ollama-generated energy efficiency tips with confidence score, cached in localStorage, with manual regenerate button.
-- **Device Table** — lists all user devices with type badges.
-- **InfluxDB Explorer** — embedded InfluxDB UI iframe for direct time-series data exploration.
-- **Mailpit Inbox** — embedded Mailpit iframe showing alert emails sent by alert-service.
-
-</details>
-
-<details>
-<summary><strong>CI/CD Pipeline</strong></summary>
-
-## CI/CD
-
-### Pipeline Overview
+### Overview
 
 ```
 push to main / tag v*
@@ -233,267 +177,75 @@ deploy-eks.yml (auto-triggered or manual)
     └── helm upgrade microservices (values-eks.yaml, --set image.tag=<sha>)
 ```
 
-- **No stored credentials** — all AWS access via GitHub OIDC federated identity.
-- **Change detection** — only rebuilds services with actual file changes.
-- **SHA-pinned deploys** — EKS never runs `:latest`, always a specific commit SHA.
-- **Concurrency guard** — only one deploy-eks run at a time.
+- **Change detection** - only rebuilds services with actual file changes.
+- **Concurrency guard** - only one deploy-eks run at a time.
+- **Claude PR reviews** - automatically reviewed for security and compliance by Claude.
 
-### Manual Operations
-
-```bash
-# Rebuild a single service from any branch:
-gh workflow run build-test.yml --ref <branch> -f service=<service-name>
-
-# Deploy to EKS manually:
-gh workflow run deploy-eks.yml
-```
-
-### Automated Code Review
-
-Every pull request triggers a Claude Code review (`.github/workflows/claude-review.yml`). Claude checks against `CLAUDE.md` conventions and posts inline feedback. Mention `@claude` in a PR comment for targeted review.
-
-| Workflow | Trigger | What it does |
-|----------|---------|-------------|
-| `build-and-push.yml` | Push to `main` or `v*` tag | Detects changed services via `dorny/paths-filter`, builds Docker images, pushes to ECR with SHA + latest tags. insight-service dual-builds: ollama + bedrock variants. |
-| `deploy-eks.yml` | After successful build, or manual `workflow_dispatch` | OIDC auth → `helm upgrade` infra → observability → microservices with SHA-pinned image tags |
-| `build-test.yml` | Manual `workflow_dispatch` | Single-service rebuild utility (uses `environment:dev` for OIDC from any branch) |
-
-All workflows use **GitHub OIDC** → IAM role assumption (no stored AWS credentials).
+All workflows use **GitHub OIDC**, so IAM role assumption (no stored AWS credentials).
 
 </details>
 
 <details>
-<summary><strong>Production Hardening</strong></summary>
+<summary><strong>🛡️ Production Hardening</strong></summary>
 
 ### Production Hardening
 
 | Feature | Configuration |
 |---------|--------------|
 | **HPA** | All 7 services autoscale: min 2, max 5 replicas, target 70% CPU |
-| **PDB** | All 7 services: minAvailable=1 (survives node drain) |
+| **PDB** | All 7 services: minAvailable=1 |
 | **NetworkPolicies** | Default-deny + per-service ingress/egress allowlists |
 | **CloudWatch Alarms** | RDS CPU >80%, connections >53/66 max, free storage <4 GiB, EKS failed nodes |
-| **TLS everywhere** | Let's Encrypt cert, TLS termination at ingress |
-| **Secrets in Secrets Manager** | No plaintext in values files; synced via ExternalSecrets |
-| **IRSA** | Pod-level IAM — insight-service has Bedrock access only |
-
-### NetworkPolicy Rules
-
-| Service | Inbound from | Outbound to |
-|---------|-------------|-------------|
-| user-service | ingress, device-svc, usage-svc, insight-svc, frontend | RDS (3306) |
-| device-service | ingress, usage-svc | RDS (3306), user-svc (8080) |
-| ingestion-service | ingress | MSK (9098) |
-| usage-service | ingress, insight-svc | MSK (9098), InfluxDB (8086), user-svc, device-svc |
-| alert-service | ingress | MSK (9098), RDS (3306), Mailpit (1025) |
-| insight-service | ingress | usage-svc (8083), Bedrock (443) |
-| frontend | ingress | user-svc (8080) |
+| **TLS throughout** | Let's Encrypt cert, TLS termination at ingress |
+| **AWS Secrets Manager** | No plaintext in values files, synced using ExternalSecrets |
+| **IRSA** | Pod-level IAM, ex. insight-service has Bedrock access only |
 
 </details>
 
 <details>
-<summary><strong>Deployments (Local / EKS)</strong></summary>
+<summary><strong>📦 Deployments (Local / EKS)</strong></summary>
+
+Three deployment targets: Docker Compose (local dev), Minikube (local K8s), and AWS EKS (production).
 
 ## Run With Docker
 
-> Requires an NVIDIA GPU with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed for Ollama GPU acceleration.
-
-Start the core stack:
 ```bash
-docker compose up -d
+docker compose up -d                                    # core stack
+docker compose -f docker-compose.observability.yml up -d  # observability stack
 ```
-
-Start the observability stack (separate compose file, shares `iot-network`):
-```bash
-docker compose -f docker-compose.observability.yml up -d
-```
-
-Check status:
-```bash
-docker compose ps
-```
-
-Stop both stacks:
-```bash
-docker compose down
-docker compose -f docker-compose.observability.yml down
-```
-
-### Service URLs
-
-Ports are consistent across Docker Compose and Kubernetes (via `minikube tunnel`).
-
-| Service | URL |
-|---|---|
-| user-service | `http://localhost:8080` |
-| device-service | `http://localhost:8081` |
-| ingestion-service | `http://localhost:8082` |
-| usage-service | `http://localhost/api/v1/usage` (via nginx) |
-| alert-service | `http://localhost:8084` |
-| insight-service | `http://localhost:8085` |
-| Microservices API (K8s ingress) | `http://localhost/api/v1/...` |
-| Kafka UI | `http://localhost:8070` |
-| InfluxDB UI | `http://localhost:8072` (iot-energy / password) |
-| Mailpit (email UI) | `http://localhost:8025` |
-| MySQL (primary) | `localhost:3307` (root / password) |
-| MySQL (replica, read-only) | `localhost:3308` (root / password) |
-| Prometheus | `http://localhost:9090` |
-| Grafana | `http://localhost:3001` (iot-energy / password) |
-| Loki | `http://localhost:3100` |
-| Tempo | `http://localhost:3200` |
 
 ## Run With Kubernetes (Minikube)
 
-> Requires: [Minikube](https://minikube.sigs.k8s.io/docs/start/), [Helm](https://helm.sh/docs/intro/install/), [kubectl](https://kubernetes.io/docs/tasks/tools/), and an NVIDIA GPU with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed.
-
-### 1. Start Minikube
+> Requires: [Minikube](https://minikube.sigs.k8s.io/docs/start/), [Helm](https://helm.sh/docs/intro/install/), [kubectl](https://kubernetes.io/docs/tasks/tools/)
 
 ```bash
 minikube start --gpus all --driver=docker --memory=8192 --cpus=6
-```
-
-### 2. Enable the Ingress Addon
-
-```bash
 minikube addons enable ingress
-```
 
-### 3. Install the Infrastructure Chart
-
-```bash
 helm install infra ./k8s/charts/infra-chart
-```
-
-Deploys: MySQL (primary + read replica StatefulSets, async GTID replication), Kafka, InfluxDB, Mailpit, Kafka UI, and Ollama (GPU-backed StatefulSet with PVC).
-
-Watch until all pods are running:
-```bash
-kubectl get pods -w
-```
-
-Ollama pulls and warms up `gemma3:4b` on first start — watch progress:
-```bash
-kubectl logs statefulset/infra-ollama -f
-```
-
-### 4. Install the Observability Chart
-
-```bash
 helm install observability ./k8s/charts/observability-chart
-```
-
-Deploys: Prometheus, Grafana, Loki, Promtail (DaemonSet), and Tempo.
-
-Watch until all pods are running:
-```bash
-kubectl get pods -w
-```
-
-### 5. Install the Microservices Chart
-
-```bash
 helm install microservices ./k8s/charts/microservices-chart
-```
 
-Deploys all 6 microservices with init containers that gate startup on their dependencies (MySQL, Kafka, upstream services).
-
-### 6. Start Minikube Tunnel
-
-In a separate terminal, run and keep open:
-```bash
-minikube tunnel
-```
-
-This exposes LoadBalancer services and the ingress to `localhost`.
-
-### Upgrade & Teardown
-
-```bash
-# After changing chart values:
-helm upgrade infra ./k8s/charts/infra-chart
-helm upgrade observability ./k8s/charts/observability-chart
-helm upgrade microservices ./k8s/charts/microservices-chart
-
-# Teardown:
-helm uninstall microservices
-helm uninstall observability
-helm uninstall infra
-minikube stop
+minikube tunnel  # in separate terminal, so we can expose services to localhost
 ```
 
 ## Run on AWS EKS (Production)
 
-The application runs on AWS EKS with managed infrastructure (RDS, MSK Serverless) and full production hardening. All infrastructure is defined in Terraform; deployments use the same Helm charts with EKS-specific value overlays.
-
-### Architecture
-
-```
-                          Route53 (energy.aidanchien.com)
-                                     │
-                                ACM TLS cert
-                                     │
-                              NLB (internet-facing)
-                                     │
-                            ingress-nginx controller
-                                     │
-            ┌────────────────────────────────────────────────┐
-            │           │            │           │            │
-        frontend   user-svc    device-svc   usage-svc    ... (7 svcs)
-            │           │            │           │            │
-            └── inter-service via ClusterIP DNS ─────────────┘
-                         │                    │
-                         ▼                    ▼
-                     RDS MySQL           MSK Serverless
-                    (managed)           (IAM auth, 9098)
-
-            In-cluster (EBS gp3 persistence):
-            - InfluxDB, Redis, Mailpit
-            - Prometheus, Grafana, Loki, Tempo
-
-            insight-service ──► AWS Bedrock (Claude Haiku 4.5)
-                                via cross-region inference profile (IRSA)
-```
+All infrastructure defined in Terraform; deployments use the same Helm charts with EKS-specific value overlays.
 
 ### AWS Resources (Terraform)
 
-| Resource | Type | Details |
-|----------|------|---------|
-| VPC | `10.20.0.0/16` | 3 public, 3 private, 3 DB subnets, NAT gateway |
-| EKS | `iot-tracker-dev` | K8s 1.31, managed node group (t3.large × 3) |
-| RDS MySQL | `db.t3.medium` | 8.0.44, encrypted, 7-day backup, Performance Insights |
-| MSK Serverless | IAM auth | SASL/SSL on port 9098, topics: `energy-usage`, `energy-alerts` |
-| Route53 | Public zone | `energy.aidanchien.com` + wildcard |
-| ACM | TLS cert | `energy.aidanchien.com` + `*.energy.aidanchien.com` (Let's Encrypt via cert-manager) |
-| Secrets Manager | 3 secrets | `iot/dev/rds/master`, `iot/dev/global`, `iot/dev/frontend` |
-| IRSA roles | 7 roles | ALB Controller, EBS CSI, ESO, ExternalDNS, cert-manager, insight-service, GHA deploy |
-| CloudWatch | 4 alarms | RDS CPU >80%, RDS connections >80% max, RDS storage <20%, EKS node health |
-| SNS | 1 topic | `iot-tracker-dev-alarms` — alarm notification target |
-| ECR Public | 8 repos | `public.ecr.aws/v6r1m8q2/energy-tracker/<service>` |
-
-### Cluster Addons
-
-Installed via `scripts/eks-bootstrap.sh`:
-
-- **EBS CSI driver** — gp3 StorageClass (default)
-- **AWS Load Balancer Controller** — provisions NLB for ingress-nginx
-- **ingress-nginx** — internet-facing NLB, handles TLS termination
-- **ExternalDNS** — auto-creates Route53 A records from Ingress resources
-- **External Secrets Operator** — syncs AWS Secrets Manager → K8s Secrets
-- **cert-manager** — DNS-01 challenges via Route53 for Let's Encrypt certs
-- **metrics-server** — enables `kubectl top` and HPA CPU metrics
-
-
-
-### CI/CD (GitHub Actions)
-
-
-
-### Prerequisites
-
-- Terraform ≥ 1.5
-- AWS CLI v2 with credentials for account `714454206433`
-- `kubectl`, `helm` 3.x
-- Domain with NS delegation to Route53
+| Resource | Details |
+|----------|---------|
+| VPC | 3 public, 3 private, 3 DB subnets, NAT gateway |
+| EKS | K8s 1.31, managed node group (t3.large × 3) |
+| RDS MySQL | db.t3.medium, encrypted, 7-day backup, Performance Insights |
+| MSK Serverless | IAM auth (SASL/SSL), topics: `energy-usage`, `energy-alerts` |
+| Route53 + ACM | `energy.aidanchien.com`, Let's Encrypt TLS via cert-manager |
+| Secrets Manager | 3 secrets synced to cluster using External Secrets Operator |
+| IRSA | 7 pod-level IAM roles (ALB Controller, EBS CSI, ESO, ExternalDNS, cert-manager, insight-service, GHA deploy) |
+| CloudWatch + SNS | 4 alarms (RDS CPU, connections, storage, EKS node health) |
+| ECR Public | 8 image repos, SHA-tagged deploys |
 
 ### Deploy from Scratch
 
@@ -508,32 +260,44 @@ aws eks update-kubeconfig --name iot-tracker-dev --region us-east-1
 # 3. Install cluster addons
 ./scripts/eks-bootstrap.sh
 
-# 4. Populate secrets
-aws secretsmanager put-secret-value --secret-id iot/dev/global \
-  --secret-string '{"SPRING_DATASOURCE_PASSWORD":"<rds-password>","INFLUX_TOKEN":"my-token","JWT_SECRET":"<jwt-secret>"}'
-aws secretsmanager put-secret-value --secret-id iot/dev/frontend \
-  --secret-string '{"NEXTAUTH_SECRET":"<secret>","GOOGLE_CLIENT_ID":"<id>","GOOGLE_CLIENT_SECRET":"<secret>"}'
-
-# 5. Deploy Helm charts
+# 4. Deploy Helm charts
 helm upgrade --install infra ./k8s/charts/infra-chart -f ./k8s/charts/infra-chart/values-eks.yaml
 helm upgrade --install observability ./k8s/charts/observability-chart -f ./k8s/charts/observability-chart/values-eks.yaml
 helm upgrade --install microservices ./k8s/charts/microservices-chart -f ./k8s/charts/microservices-chart/values-eks.yaml
-
-# 6. Verify
-kubectl get pods   # All pods Running
-kubectl get hpa    # CPU targets reporting
-kubectl get pdb    # ALLOWED DISRUPTIONS ≥ 1
 ```
 
 ### Teardown
 
 ```bash
-helm uninstall microservices
-helm uninstall observability
-helm uninstall infra
+helm uninstall microservices && helm uninstall observability && helm uninstall infra
 cd terraform/envs/dev && terraform destroy
 ```
 
+</details>
+<details>
+<summary><strong>💵 Cost</strong></summary>
+
+### AWS Management Costs
+| Component | Spec | Monthly |
+|---|---|---|
+| EKS control plane | K8s 1.31, standard support | $73.00 |
+| EC2 nodes | 3× t3.large @ $0.0832/hr | $182.21 |
+| RDS instance | db.t3.medium MySQL, single-AZ @ $0.068/hr | $49.64 |
+| RDS storage | gp3, ~20 GB allocated @ $0.115/GB | $2.30 |
+| MSK Serverless cluster | Flat $0.75/cluster-hr | $547.50 |
+| MSK Serverless partitions | ~10 partitions @ $0.0015/hr | $10.95 |
+| NAT Gateway | 1× @ $0.045/hr + data processing | ~$34 |
+| NLB | Base @ $0.0225/hr + minimal LCU | ~$21 |
+| EBS gp3 | 7 in-cluster PVCs + 3 node roots (~130 GB) | ~$11 |
+| Secrets Manager | 3 secrets @ $0.40/mo + API calls | $1.20 |
+| Route53 hosted zone | 1 zone | $0.50 |
+| CloudWatch | 4 alarms (free tier), basic metrics/logs | ~$3 |
+| ACM certificates | Public certs are free | $0 |
+| Bedrock (Haiku 4.5) | Pay-per-token, low personal usage | ~$1–5 |
+| Data transfer out | Internet egress | ~$1–3 |
+| **Total** | | **~$940/mo** |
+
+> This is very expensive :( so production environment is currently spun down. All infrastructure reproducible with `terraform apply` + `helm install` (see [Deploying to EKS](#run-on-aws-eks-production)).
 </details>
 
 ---
@@ -552,11 +316,11 @@ services/               # 6 Spring Boot microservices (user, device, ingestion, 
 frontend/               # Next.js 16 (App Router, Tailwind v4, shadcn/ui)
 shelly/                 # Shelly smart plug integration script + setup guide
 observability/
-  ├── prometheus/       # prometheus.yml — scrape configs for all services
+  ├── prometheus/       # prometheus.yml - scrape configs for all services
   ├── grafana/          # Provisioned datasources (Prometheus, Loki, Tempo) + 4 dashboards
-  ├── loki/             # loki.yaml — in-memory ring, TSDB storage
-  ├── promtail/         # promtail.yaml — Docker SD, ECS JSON pipeline
-  └── tempo/            # tempo.yaml — OTLP receivers, local storage
+  ├── loki/             # loki.yaml - in-memory ring, TSDB storage
+  ├── promtail/         # promtail.yaml - Docker SD, ECS JSON pipeline
+  └── tempo/            # tempo.yaml - OTLP receivers, local storage
 k8s/
   └── charts/
       ├── infra-chart/          # MySQL (primary + replica), Kafka, InfluxDB, Redis, Mailpit, Kafka UI, Ollama
@@ -568,7 +332,7 @@ scripts/
   └── eks-bootstrap.sh  # Installs EKS cluster addons (ALB Controller, ESO, cert-manager, etc.)
 .github/workflows/
   ├── build-and-push.yml    # CI: detect changed services, build, push to ECR
-  ├── deploy-eks.yml        # CD: helm upgrade infra → observability → microservices
+  ├── deploy-eks.yml        # CD: helm upgrade infra -> observability -> microservices
   ├── build-test.yml        # Manual single-service rebuild from any branch
   └── claude-review.yml     # AI code review on PRs
 docker-compose.yml                 # Core application stack
