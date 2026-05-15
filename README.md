@@ -1,9 +1,33 @@
-<h1 align="center"> Home IoT Energy Tracker</h1>
+<h1 align="left"> Home Energy Tracker</h1>
 
-> Java Spring Boot microservice-based architecture to handle 500k+ users and 2.5m+ devices. Aggregates energy usage, analyzes + stores time-series IoT data, and produces AI-generated efficiency insights.
 
-## System Design
-<img width="900" alt="IoT Telemetry System Design" src="https://github.com/user-attachments/assets/c14cc644-de06-4550-b7cb-548b418fd094" />
+Ingests IoT data from your home devices. 
+
+Stores, processes, and delivers real-time alerts and AI insights.
+
+Built for real production workloads with AWS Elastic Kubernetes Service and end-to-end observability.
+
+
+[![Github Release](https://img.shields.io/github/v/release/chieaid24/energy-tracker)](https://github.com/chieaid24/energy-tracker/releases)
+
+
+<p align="center">
+  <img width="800" alt="IoT Telemetry System Design" src="https://github.com/user-attachments/assets/998807a5-7010-4095-b0aa-1fb773d4f4ec" />
+</p>
+
+## Technical Highlights
+- Event-driven pipeline with **Kafka decoupling** ingestion, processing, and alerting across three topics.
+- **Dual persistence model**: MySQL for relational data (users, devices, alerts) and InfluxDB for time-series usage analytics.
+- **MySQL primary + read replica** with async GTID row-based replication (`super_read_only=ON` on the replica). `user-service`, `device-service`, and `alert-service` route reads to the replica via Spring's `AbstractRoutingDataSource` keyed off `@Transactional(readOnly=true)`, with separate Hikari pools (`primary` size 8, `replica` size 4) and a `LazyConnectionDataSourceProxy` so the routing key resolves after the transaction flag is set. Flyway is pinned to the primary pool.
+- **Redis caching layer**: usage-service caches InfluxDB query results in Redis (2-minute TTL) and uses a distributed `SETNX` lock on the 10-second aggregation scheduler, ensuring only one replica hits InfluxDB per tick regardless of how many instances are running.
+- **AI-powered insights** via Spring AI + Ollama (gemma3:4b), polling usage aggregates on a cron schedule to generate efficiency recommendations.
+- **Multi-threaded** simulation in ingestion-service to stress test throughput and backpressure locally.
+- **Full observability stack**: distributed tracing (OTLP → Tempo), structured log aggregation (ECS JSON → Promtail → Loki), and Prometheus metrics — all correlated in Grafana.
+- **Spring Boot version split**: 5 services on Boot 4.0.1, insight-service on Boot 3.5.9 (Spring AI 1.1.2 does not yet support Boot 4.x).
+- **Production-grade Kubernetes deployment** on AWS EKS with Terraform IaC, HPA autoscaling (2–5 replicas), PodDisruptionBudgets, NetworkPolicies (default-deny), and CloudWatch alarms.
+- **Fully automated CI/CD**: GitHub Actions OIDC → ECR push → Helm deploy, with change detection (only rebuilds modified services).
+- **Zero-secret codebase**: all credentials in AWS Secrets Manager, synced to K8s via External Secrets Operator (IRSA-bound).
+
 
 
 ## Grafana Observability
@@ -26,18 +50,6 @@
 | Observability | <img alt="Static Badge" src="https://img.shields.io/badge/prometheus-%23E6522C?style=for-the-badge&logo=prometheus&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/grafana-%23F46800?style=for-the-badge&logo=grafana&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/loki-%23D96800?style=for-the-badge&logoColor=%23FFFFFF"> |
 | Infrastructure |   <img alt="Static Badge" src="https://img.shields.io/badge/kubernetes%20(eks)-%23326CE5?style=for-the-badge&logo=kubernetes&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/helm-%230F1689?style=for-the-badge&logo=helm&logoColor=%23FFFFFF"> <img alt="Static Badge" src="https://img.shields.io/badge/Docker-%232496ED?style=for-the-badge&logo=docker&logoColor=%23FFFFFF" />     <img alt="Static Badge" src="https://img.shields.io/badge/terraform-%23844FBA?style=for-the-badge&logo=terraform&logoColor=%23FFFFFF">   <img alt="Static Badge" src="https://img.shields.io/badge/GitHub%20Actions-%232088FF?style=for-the-badge&logo=githubactions&logoColor=%23FFFFFF">|
 
-## Technical Highlights
-- Event-driven pipeline with **Kafka decoupling** ingestion, processing, and alerting across three topics.
-- **Dual persistence model**: MySQL for relational data (users, devices, alerts) and InfluxDB for time-series usage analytics.
-- **MySQL primary + read replica** with async GTID row-based replication (`super_read_only=ON` on the replica). `user-service`, `device-service`, and `alert-service` route reads to the replica via Spring's `AbstractRoutingDataSource` keyed off `@Transactional(readOnly=true)`, with separate Hikari pools (`primary` size 8, `replica` size 4) and a `LazyConnectionDataSourceProxy` so the routing key resolves after the transaction flag is set. Flyway is pinned to the primary pool.
-- **Redis caching layer**: usage-service caches InfluxDB query results in Redis (2-minute TTL) and uses a distributed `SETNX` lock on the 10-second aggregation scheduler, ensuring only one replica hits InfluxDB per tick regardless of how many instances are running.
-- **AI-powered insights** via Spring AI + Ollama (gemma3:4b), polling usage aggregates on a cron schedule to generate efficiency recommendations.
-- **Multi-threaded** simulation in ingestion-service to stress test throughput and backpressure locally.
-- **Full observability stack**: distributed tracing (OTLP → Tempo), structured log aggregation (ECS JSON → Promtail → Loki), and Prometheus metrics — all correlated in Grafana.
-- **Spring Boot version split**: 5 services on Boot 4.0.1, insight-service on Boot 3.5.9 (Spring AI 1.1.2 does not yet support Boot 4.x).
-- **Production-grade Kubernetes deployment** on AWS EKS with Terraform IaC, HPA autoscaling (2–5 replicas), PodDisruptionBudgets, NetworkPolicies (default-deny), and CloudWatch alarms.
-- **Fully automated CI/CD**: GitHub Actions OIDC → ECR push → Helm deploy, with change detection (only rebuilds modified services).
-- **Zero-secret codebase**: all credentials in AWS Secrets Manager, synced to K8s via External Secrets Operator (IRSA-bound).
 
 ## Data Flow
 
