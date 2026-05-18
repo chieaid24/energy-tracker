@@ -7,7 +7,7 @@ I use **Shelly Plug US Gen4** smart plugs to send real energy telemetry into the
 The script (`iot-connect.js`) runs on the Shelly device itself using the built-in scripting engine. On a configurable interval, it reads the current switch status (power, voltage, current, energy, temperature) and POSTs it as JSON to the ingestion endpoint.
 
 ```
-Shelly Plug (HTTP POST every 5s)  →  ingestion-service :8082  →  Kafka  →  usage-service
+Shelly Plug (HTTP POST every 5s)  →  ingestion-service:8082  →  Kafka  →  usage-service
 ```
 
 ## Setup
@@ -21,6 +21,8 @@ The target endpoint is:
 POST https://energy.aidanchien.com/api/v1/ingestion/shelly/{deviceId}
 ```
 
+(Or your locally hosted endpoint)
+
 ### 2. Register your device
 
 Create a device entry via `device-service` so the ingestion pipeline can associate readings with a known device ID. Note the numeric device ID returned.
@@ -28,7 +30,7 @@ Create a device entry via `device-service` so the ingestion pipeline can associa
 ### 3. Load the script onto the Shelly
 
 1. Open the Shelly web UI (navigate to the plug's local IP in a browser).
-2. Go to **Scripts** → **Create script**.
+2. Go to **Scripts** -> **Create script**.
 3. Paste the contents of `iot-connect.js`.
 4. Update the two config values at the top of the file:
 
@@ -43,9 +45,9 @@ let CONFIG = {
 
 ### 4. Verify
 
-Check that data is flowing:
-- Kafka UI (`http://localhost:8070`) — messages appearing on the `energy-usage` topic.
-- InfluxDB UI (`http://localhost:8072`) — readings written to `usage-bucket`.
+Check that data is flowing (if hosting locally):
+- Kafka UI (`http://localhost:8070`) - messages appearing on the `energy-usage` topic.
+- InfluxDB UI (`http://localhost:8072`) - readings written to `usage-bucket`.
 
 ## Payload
 
