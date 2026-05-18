@@ -58,3 +58,11 @@ Each POST sends the following fields from the Shelly switch component:
 | `current` | Current (A) |
 | `aenergy` | Accumulated energy (Wh) |
 | `temperature` | Device temperature (°C) |
+
+## My Setup
+<p align="center">
+  <img width="49%" src="https://github.com/user-attachments/assets/8920c28f-f4bc-427d-b094-4f5543d3e00f" alt="Setup photo 1" />
+  <img width="49%" src="https://github.com/user-attachments/assets/14dbf95d-86e3-4ac7-8f44-6e440262ab26" alt="Setup photo 2" />
+</p>
+
+**Pictured:** The left image shows the Shelly plug I have currently charging my laptop, and the right shows the dashboard updating real-time with the consumed power.
