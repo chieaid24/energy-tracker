@@ -25,7 +25,8 @@ Built for real production workloads with AWS Elastic Kubernetes Service, microse
 - **Cloud-native Kubernetes** with HPA autoscaling, self-healing, and rolling deployments.
 
 **CI/CD**
-- Automated **CI/CD pipeline** with **GitHub Actions** that builds -> tests -> deploys to EKS.
+- Automated **CI/CD pipeline** with **GitHub Actions** that tests -> builds -> deploys to EKS.
+- **Testcontainers** (MySQL, InfluxDB) and **EmbeddedKafka** for complete E2E test coverage.
 
 **Observability**
 - Full **observability stack** with tracing, log aggregation, and metrics collected in Grafana.
