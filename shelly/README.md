@@ -67,4 +67,4 @@ Each POST sends the following fields from the Shelly switch component:
   <img width="49%" src="https://github.com/user-attachments/assets/14dbf95d-86e3-4ac7-8f44-6e440262ab26" alt="Setup photo 2" />
 </p>
 
-**Pictured:** The left image shows the Shelly plug I have currently charging my laptop, and the right shows the dashboard updating real-time with the consumed power.
+**Pictured:** The left image shows the Shelly plug I have currently charging my laptop, and the right shows the dashboard updating real-time with the consumed power!
