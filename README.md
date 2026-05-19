@@ -5,7 +5,7 @@ Ingests IoT data from your home devices.
 
 Stores, processes, and delivers real-time alerts and AI insights.
 
-Built for production with AWS EKS, decoupled microservices, and end-to-end observability.
+Built for real production workloads with AWS EKS, decoupled microservices, and end-to-end observability.
 
 > Note: live deployment is currently down to save on costs
 
