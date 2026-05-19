@@ -46,6 +46,8 @@ class UserRepositoryTests {
                 .address("123 Main St")
                 .alerting(true)
                 .energyAlertingThreshold(500.0)
+                .password("hashed-not-real")
+                .authProvider("LOCAL")
                 .build());
 
     assertThat(saved.getId()).isNotNull();
