@@ -5,7 +5,7 @@ Ingests IoT data from your home devices.
 
 Stores, processes, and delivers real-time alerts and AI insights.
 
-Built for real production workloads with AWS Elastic Kubernetes Service, microservices, and end-to-end observability.
+Built for real production workloads with AWS Elastic Kubernetes Service, decoupled microservices, and end-to-end observability.
 
 > Note: live deployment is currently down to save on costs
 
@@ -21,15 +21,15 @@ Built for real production workloads with AWS Elastic Kubernetes Service, microse
 ## Technical Highlights
 
 **Infrastructure**
-- AWS resources are **100% Infrastructure as Code** with Terraform, deployed through Helm.
+- AWS architecture is **100% Infrastructure as Code** with Terraform, deployed through Helm.
 - **Cloud-native Kubernetes** with HPA autoscaling, self-healing, and rolling deployments.
 
 **CI/CD**
-- Automated **CI/CD pipeline** with **GitHub Actions** that tests -> builds -> deploys to EKS.
+- Automated **GitHub Actions** pipeline that validates changed code -> builds images -> deploys to EKS.
 - **Testcontainers** (MySQL, InfluxDB) and **EmbeddedKafka** for complete E2E test coverage.
 
 **Observability**
-- Full **observability stack** with tracing, log aggregation, and metrics collected in Grafana.
+- Full **Grafana observability stack** with platform-wide tracing, log aggregation, and metrics.
 
 **Data Layer**
 - Scalable DB layer with **MySQL + read replicas** for relational data and **InfluxDB + Redis** for real-time analytics.
